@@ -1,0 +1,7 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "Set-Content": true,
+        "ForEach-Object": true,
+        "1215..1265": true
+    }
+}
