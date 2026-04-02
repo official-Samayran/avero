@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:file_picker/file_picker.dart';
 import '../theme.dart';
 import '../widgets.dart';
 import '../services/app_blocker.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class TimerScreen extends StatefulWidget {
   const TimerScreen({super.key});
@@ -21,6 +23,16 @@ class _TimerScreenState extends State<TimerScreen> {
   // Soundscape
   final AudioPlayer _audioPlayer = AudioPlayer();
   bool _isPlayingSound = false;
+  int _currentTrackIndex = 0;
+  final List<Map<String, dynamic>> _tracks = [
+    {'name': 'DEEP BROWN NOISE', 'url': 'brown_noise.mp3', 'isLocal': false},
+    {'name': 'LO-FI BEATS', 'url': 'lofi.mp3', 'isLocal': false},
+    {'name': 'HEAVY RAIN', 'url': 'rain.mp3', 'isLocal': false},
+  ];
+
+  // Tags
+  final List<String> _tags = ['CODING', 'READING', 'WORKOUT', 'DEEP WORK'];
+  String _selectedTag = 'CODING';
 
   @override
   void dispose() {
@@ -33,18 +45,54 @@ class _TimerScreenState extends State<TimerScreen> {
     if (_isPlayingSound) {
       await _audioPlayer.pause();
     } else {
-      // Because we don't have local assets guaranteed, we can use a known internet ambient sound or wait for the user to add one.
-      // Alternatively, we use a placeholder asset and catch error if missing.
-      try {
-        await _audioPlayer.setReleaseMode(ReleaseMode.loop);
-        await _audioPlayer.play(AssetSource('brown_noise.mp3')); // Assume user has this or we mock it
-      } catch (e) {
-        debugPrint("No audio asset found.");
-      }
+      await _playCurrentTrack();
     }
     setState(() {
       _isPlayingSound = !_isPlayingSound;
     });
+  }
+
+  Future<void> _playCurrentTrack() async {
+    try {
+      await _audioPlayer.setReleaseMode(ReleaseMode.loop);
+      final track = _tracks[_currentTrackIndex];
+      if (track['isLocal'] == true) {
+        await _audioPlayer.play(DeviceFileSource(track['url']));
+      } else {
+        await _audioPlayer.play(AssetSource(track['url']));
+      }
+    } catch (e) {
+      debugPrint("No audio asset found.");
+    }
+  }
+
+  void _nextTrack() async {
+    setState(() {
+      _currentTrackIndex = (_currentTrackIndex + 1) % _tracks.length;
+    });
+    if (_isPlayingSound) {
+      await _playCurrentTrack();
+    }
+  }
+
+  Future<void> _pickLocalAudioFile() async {
+    FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.audio);
+
+    if (result != null && result.files.single.path != null) {
+      String localPath = result.files.single.path!;
+      String fileName = result.files.single.name;
+      setState(() {
+        _tracks.add({
+          'name': fileName.toUpperCase(),
+          'url': localPath,
+          'isLocal': true,
+        });
+        _currentTrackIndex = _tracks.length - 1;
+      });
+      if (_isPlayingSound) {
+        await _playCurrentTrack();
+      }
+    }
   }
 
   void _startSession() {
@@ -62,11 +110,11 @@ class _TimerScreenState extends State<TimerScreen> {
 
     // Start App Blocker
     AppBlockerService().startMonitoring(() {
-      _crashSession(reason: "BLOCKED APP OPENED!");
+      _crashSession(reason: "BLOCKED APP DETECTED");
     });
   }
 
-  void _crashSession({String reason = "SESSION CRASHED. NO XP."}) async {
+  void _crashSession({String reason = "SESSION CRASHED"}) async {
     _timer?.cancel();
     AppBlockerService().stopMonitoring();
     if (_isPlayingSound) {
@@ -80,14 +128,46 @@ class _TimerScreenState extends State<TimerScreen> {
     });
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: Colors.redAccent,
-          content: Text(
-            reason,
-            style: getThemeTextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-          ),
-        ),
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) {
+          return Scaffold(
+            backgroundColor: const Color(0xFFEF4444),
+            body: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.warning_amber_rounded, size: 100, color: Colors.black),
+                    const SizedBox(height: 32),
+                    Text(
+                      reason,
+                      textAlign: TextAlign.center,
+                      style: getThemeTextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: Colors.black),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      "-100 XP PENALTY",
+                      style: getThemeTextStyle(fontSize: 48, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: 2),
+                    ),
+                    const SizedBox(height: 64),
+                    buildThemedButton(
+                      'ACCEPT PUNISHMENT',
+                      Colors.black,
+                      () {
+                        Navigator.pop(context);
+                      },
+                      textColor: Colors.white,
+                      width: double.infinity,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
       );
     }
   }
@@ -102,8 +182,6 @@ class _TimerScreenState extends State<TimerScreen> {
 
     int minutes = (_seconds / 60).floor();
     
-    // Add logic to save session in global state / prefs ...
-    // For now we persist minutes to SharedPreferences to read in Dashboard
     final prefs = await SharedPreferences.getInstance();
     int currentMinutes = prefs.getInt('total_minutes') ?? 0;
     await prefs.setInt('total_minutes', currentMinutes + minutes);
@@ -118,7 +196,7 @@ class _TimerScreenState extends State<TimerScreen> {
         SnackBar(
           backgroundColor: Colors.greenAccent,
           content: Text(
-            "SESSION COMPLETE +${minutes * 8} XP",
+            "SESSION COMPLETE +${minutes * 8} XP IN $_selectedTag",
             style: getThemeTextStyle(color: Colors.black, fontWeight: FontWeight.bold),
           ),
         ),
@@ -132,68 +210,188 @@ class _TimerScreenState extends State<TimerScreen> {
     return "${mins.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}";
   }
 
+  Widget _buildSetupAndTimer() {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        if (!_isActive) ...[
+          Text("CHOOSE QUEST //", style: getThemeTextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Theme.of(context).textTheme.bodyLarge?.color)),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            alignment: WrapAlignment.center,
+            children: _tags.map((tag) {
+              bool isSelected = _selectedTag == tag;
+              return GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _selectedTag = tag;
+                  });
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: isSelected ? Theme.of(context).textTheme.bodyLarge?.color : Colors.transparent,
+                    border: Border.all(color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black, width: 2),
+                  ),
+                  child: Text(
+                    tag,
+                    style: getThemeTextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: isSelected ? Theme.of(context).scaffoldBackgroundColor : Theme.of(context).textTheme.bodyLarge?.color,
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 32),
+        ],
+        SizedBox(
+          width: 280,
+          height: 280,
+          child: CustomPaint(
+            painter: ThemedTimerPainter(seconds: _seconds, style: appThemeNotifier.value),
+            child: Center(
+              child: Text(
+                _formattedTime,
+                style: getThemeTextStyle(
+                  fontSize: 64,
+                  fontWeight: FontWeight.w900,
+                  color: Theme.of(context).textTheme.bodyLarge?.color,
+                  height: 1.0,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildControls() {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        ThemedCard(
+          backgroundColor: Theme.of(context).cardColor,
+          child: Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: Row(
+              children: [
+                IconButton(
+                  icon: Icon(_isPlayingSound ? Icons.pause : Icons.play_arrow),
+                  onPressed: _toggleSoundscape,
+                  color: Theme.of(context).textTheme.bodyLarge?.color,
+                  iconSize: 32,
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "FOCUS RADIO",
+                        style: getThemeTextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey),
+                      ),
+                      Text(
+                        _tracks[_currentTrackIndex]['name']!,
+                        style: getThemeTextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: Theme.of(context).textTheme.bodyLarge?.color),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(CupertinoIcons.folder_solid),
+                  onPressed: _pickLocalAudioFile,
+                  iconSize: 24,
+                  color: Theme.of(context).textTheme.bodyLarge?.color,
+                  tooltip: "Load Local File",
+                ),
+                IconButton(
+                  icon: const Icon(Icons.skip_next),
+                  onPressed: _nextTrack,
+                  iconSize: 28,
+                  color: Theme.of(context).textTheme.bodyLarge?.color,
+                )
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 48),
+        _isActive
+            ? Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: buildThemedButton(
+                      'FINISH',
+                      Colors.greenAccent,
+                      _finishSession,
+                      width: double.infinity,
+                      textColor: Colors.black,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: buildThemedButton(
+                      'CRASH!',
+                      const Color(0xFFEF4444),
+                      () => _crashSession(reason: "MANUAL CRASH DEPLOYED"),
+                      textColor: Colors.white,
+                      width: double.infinity,
+                    ),
+                  ),
+                ],
+              )
+            : buildThemedButton(
+                'START GRIND',
+                Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black,
+                _startSession,
+                width: double.infinity,
+                textColor: Theme.of(context).scaffoldBackgroundColor,
+              ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text('FOCUS', style: getThemeTextStyle(fontWeight: FontWeight.w900, fontSize: 24, letterSpacing: 2)),
-        actions: [
-          IconButton(
-            icon: Icon(_isPlayingSound ? Icons.volume_up : Icons.volume_off),
-            onPressed: _toggleSoundscape,
-            tooltip: "Toggle Soundscape",
-          )
-        ],
       ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            SizedBox(
-              width: 280,
-              height: 280,
-              child: CustomPaint(
-                painter: ThemedTimerPainter(seconds: _seconds, style: appThemeNotifier.value),
-                child: Center(
-                  child: Text(
-                    _formattedTime,
-                    style: getThemeTextStyle(
-                      fontSize: 64,
-                      fontWeight: FontWeight.w900,
-                      color: Theme.of(context).textTheme.bodyLarge?.color,
-                      height: 1.0,
-                    ),
-                  ),
-                ),
+      body: OrientationBuilder(
+        builder: (context, orientation) {
+          if (orientation == Orientation.portrait) {
+            return SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _buildSetupAndTimer(),
+                  const SizedBox(height: 48),
+                  _buildControls(),
+                ],
               ),
-            ),
-            const SizedBox(height: 64),
-            _isActive
-                ? Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      buildThemedButton(
-                        'FINISH',
-                        Colors.greenAccent,
-                        _finishSession,
-                      ),
-                      const SizedBox(width: 16),
-                      buildThemedButton(
-                        'CRASH!',
-                        const Color(0xFFEF4444),
-                        () => _crashSession(),
-                        textColor: Colors.white,
-                      ),
-                    ],
-                  )
-                : buildThemedButton(
-                    'START GRIND',
-                    Colors.white,
-                    _startSession,
-                    width: 200,
-                  ),
-          ],
-        ),
+            );
+          } else {
+            // Landscape mode avoids overflow by using Row instead of Column
+            return SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(child: _buildSetupAndTimer()),
+                  const SizedBox(width: 48),
+                  Expanded(child: _buildControls()),
+                ],
+              ),
+            );
+          }
+        },
       ),
     );
   }

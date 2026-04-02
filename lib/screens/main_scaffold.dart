@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import '../theme.dart';
 import 'timer_screen.dart';
 import 'dashboard_screen.dart';
+import 'league_screen.dart';
 import 'settings_screen.dart';
 
 class MainScaffold extends StatefulWidget {
@@ -18,6 +19,7 @@ class _MainScaffoldState extends State<MainScaffold> {
   final List<Widget> _screens = [
     const TimerScreen(),
     const DashboardScreen(),
+    const LeagueScreen(),
     const SettingsScreen(),
   ];
 
@@ -44,6 +46,7 @@ class _MainScaffoldState extends State<MainScaffold> {
         items: const [
           BottomNavigationBarItem(icon: Icon(CupertinoIcons.timer), label: 'Focus'),
           BottomNavigationBarItem(icon: Icon(CupertinoIcons.graph_square), label: 'Dashboard'),
+          BottomNavigationBarItem(icon: Icon(CupertinoIcons.group_solid), label: 'League'),
           BottomNavigationBarItem(icon: Icon(CupertinoIcons.shield_fill), label: 'Shield'),
         ],
       ),

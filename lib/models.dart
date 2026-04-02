@@ -23,12 +23,14 @@ class SessionHistoryEntry {
   final int durationMinutes;
   final int xp;
   final bool success;
+  final String tag;
 
   SessionHistoryEntry({
     required this.timestamp,
     required this.durationMinutes,
     required this.xp,
     required this.success,
+    this.tag = 'FOCUS',
   });
 
   factory SessionHistoryEntry.fromJson(Map<String, dynamic> json) {
@@ -37,6 +39,7 @@ class SessionHistoryEntry {
       durationMinutes: json['durationMinutes'] as int,
       xp: json['xp'] as int,
       success: json['success'] as bool,
+      tag: json['tag'] as String? ?? 'FOCUS',
     );
   }
 
@@ -46,6 +49,37 @@ class SessionHistoryEntry {
       'durationMinutes': durationMinutes,
       'xp': xp,
       'success': success,
+      'tag': tag,
     };
   }
+}
+
+class BossBattle {
+  final String id;
+  final String name;
+  final int maxHealth;
+  int currentHealth;
+  final int rewardXP;
+
+  BossBattle({
+    required this.id,
+    required this.name,
+    required this.maxHealth,
+    required this.currentHealth,
+    required this.rewardXP,
+  });
+}
+
+class LeagueUser {
+  final String id;
+  final String name;
+  final int xp;
+  final bool isCurrentUser;
+
+  LeagueUser({
+    required this.id,
+    required this.name,
+    required this.xp,
+    this.isCurrentUser = false,
+  });
 }
